@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Absensi Online dengan Kamera</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: white;
+      padding: 25px;
+      width: 95%;
+      max-width: 450px;
+      border-radius: 15px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+
+    h2 {
+      color: #203a43;
+      margin-bottom: 15px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background: #203a43;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #2c5364;
+    }
+
+    video, canvas {
+      width: 100%;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    #response {
+      margin-top: 15px;
+      font-weight: bold;
+      color: green;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Absensi Online</h2>
+
+  <input type="text" id="nama" placeholder="Nama Lengkap" required>
+
+  <select id="kelas" required>
+    <option value="">Pilih Kelas</option>
+    <option value="Kelas 1">Kelas 1</option>
+    <option value="Kelas 2">Kelas 2</option>
+    <option value="Kelas 3">Kelas 3</option>
+    <option value="Kelas 4">Kelas 4</option>
+    <option value="Kelas 5">Kelas 5</option>
+    <option value="Kelas 6">Kelas 6</option>
+  </select>
+
+  <input type="text" id="nis" placeholder="NIS" required>
+
+  <select id="status">
+    <option value="Hadir">Hadir</option>
+    <option value="Izin">Izin</option>
+    <option value="Sakit">Sakit</option>
+    <option value="Alpha">Alpha</option>
+  </select>
+
+  <button type="button" onclick="bukaKamera()">Buka Kamera</button>
+
+  <video id="video" autoplay playsinline class="hidden"></video>
+
+  <button type="button" id="snap" class="hidden" onclick="ambilFoto()">Ambil Foto</button>
+
+  <canvas id="canvas" class="hidden"></canvas>
+
+  <button type="button" onclick="kirimData()">Kirim Absen</button>
+
+  <div id="response"></div>
+</div>
+
+
+<script>
+  const scriptURL = "https://script.google.com/macros/s/AKfycbx8WZ8HL9VU3To3taisBXKkyK1NSLSJuIMrTvA1eP01uYkjmtfp-M4cORfPpVzFtRHH/exec";
+
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const context = canvas.getContext("2d");
+  const snapBtn = document.getElementById("snap");
+  const responseBox = document.getElementById("response");
+
+  let fotoData = "";
+  let stream = null;
+
+
+async function bukaKamera() {
+  try {
+    const constraints = {
+      video: true,
+      audio: false
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    const video = document.getElementById("video");
+    video.srcObject = stream;
+
+    video.style.display = "block";
+    document.getElementById("snap").style.display = "block";
+
+    await video.play();
+
+    document.getElementById("response").innerHTML = "Kamera aktif.";
+
+  } catch (err) {
+    console.error(err);
+
+    if (location.protocol === "file:") {
+      alert("File dibuka dari komputer lokal.\nGunakan Live Server / localhost agar kamera bisa aktif.");
+    } else {
+      alert("Izin kamera ditolak atau perangkat tidak tersedia.");
+    }
+  }
+}
+
+  function ambilFoto() {
+    if (!stream) {
+      alert("Buka kamera terlebih dahulu!");
+      return;
+    }
+
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      alert("Kamera belum siap. Tunggu beberapa detik lalu coba lagi.");
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    fotoData = canvas.toDataURL("image/png");
+
+    canvas.classList.remove("hidden");
+
+    responseBox.innerHTML = "Foto berhasil diambil.";
+
+    // Optional: matikan kamera setelah foto
+    stream.getTracks().forEach(track => track.stop());
+  }
+
+  function kirimData() {
+    const nama = document.getElementById("nama").value.trim();
+    const kelas = document.getElementById("kelas").value;
+    const nis = document.getElementById("nis").value.trim();
+    const status = document.getElementById("status").value;
+
+    if (!nama || !kelas || !nis) {
+      alert("Semua data wajib diisi!");
+      return;
+    }
+
+    if (!fotoData) {
+      alert("Silakan ambil foto terlebih dahulu!");
+      return;
+    }
+
+    responseBox.innerHTML = "Mengirim data...";
+
+    fetch(scriptURL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        nama: nama,
+        kelas: kelas,
+        nis: nis,
+        status: status,
+        foto: fotoData
+      })
+    })
+    .then(() => {
+      responseBox.innerHTML = "Absen berhasil dikirim!";
+
+      document.getElementById("nama").value = "";
+      document.getElementById("kelas").value = "";
+      document.getElementById("nis").value = "";
+      document.getElementById("status").value = "Hadir";
+
+      fotoData = "";
+
+      canvas.classList.add("hidden");
+      video.classList.add("hidden");
+      snapBtn.classList.add("hidden");
+    })
+    .catch(error => {
+      responseBox.innerHTML = "Terjadi kesalahan saat upload!";
+      console.error("Upload error:", error);
+    });
+  }
+
+</script>
+
+</body>
+</html>
