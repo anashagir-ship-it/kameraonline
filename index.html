@@ -110,73 +110,183 @@
 
 
 <script>
-  const scriptURL = "https://script.google.com/macros/s/AKfycbx8WZ8HL9VU3To3taisBXKkyK1NSLSJuIMrTvA1eP01uYkjmtfp-M4cORfPpVzFtRHH/exec";
 
-  const video = document.getElementById("video");
-  const canvas = document.getElementById("canvas");
-  const context = canvas.getContext("2d");
-  const snapBtn = document.getElementById("snap");
-  const responseBox = document.getElementById("response");
+const scriptURL = "https://script.google.com/macros/s/AKfycbx8WZ8HL9VU3To3taisBXKkyK1NSLSJuIMrTvA1eP01uYkjmtfp-M4cORfPpVzFtRHH/exec";
 
-  let fotoData = "";
-  let stream = null;
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const snapBtn = document.getElementById("snap");
+const responseBox = document.getElementById("response");
+const ctx = canvas.getContext("2d");
 
+let stream = null;
+let fotoData = "";
+
+/*
+PENTING:
+1. Jalankan lewat:
+   http://localhost
+   atau
+   http://127.0.0.1
+   atau HTTPS
+2. JANGAN buka langsung file:///index.html
+*/
+
+function cekBrowserSupport() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Browser tidak mendukung kamera. Gunakan Chrome / Edge terbaru.");
+    return false;
+  }
+  return true;
+}
 
 async function bukaKamera() {
+  if (!cekBrowserSupport()) return;
+
+  // Cek jika file lokal
+  if (location.protocol === "file:") {
+    alert("Kamera diblokir karena file dibuka langsung dari komputer.\n\nGunakan:\n1. Live Server VS Code\n2. localhost\n3. Hosting HTTPS");
+    return;
+  }
+
+  responseBox.innerHTML = "Meminta izin kamera...";
+
   try {
-    const constraints = {
-      video: true,
-      audio: false
-    };
+    // Stop stream lama
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
 
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    // Coba kamera depan
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user"
+        },
+        audio: false
+      });
+    } catch (e) {
+      // Fallback ke kamera default
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false
+      });
+    }
 
-    const video = document.getElementById("video");
     video.srcObject = stream;
 
-    video.style.display = "block";
-    document.getElementById("snap").style.display = "block";
+    // Tunggu siap
+    video.onloadedmetadata = async () => {
+      try {
+        await video.play();
 
-    await video.play();
+        video.classList.remove("hidden");
+        video.style.display = "block";
 
-    document.getElementById("response").innerHTML = "Kamera aktif.";
+        snapBtn.classList.remove("hidden");
+        snapBtn.style.display = "block";
+
+        responseBox.innerHTML = "Kamera aktif. Klik Ambil Foto.";
+      } catch (playErr) {
+        console.error(playErr);
+        responseBox.innerHTML = "Video gagal diputar.";
+      }
+    };
 
   } catch (err) {
-    console.error(err);
+    console.error("Kamera error:", err);
 
-    if (location.protocol === "file:") {
-      alert("File dibuka dari komputer lokal.\nGunakan Live Server / localhost agar kamera bisa aktif.");
+    if (err.name === "NotAllowedError") {
+      alert("Izin kamera ditolak.\nKlik ikon kamera di address bar lalu izinkan.");
+    } else if (err.name === "NotFoundError") {
+      alert("Kamera tidak ditemukan di perangkat.");
     } else {
-      alert("Izin kamera ditolak atau perangkat tidak tersedia.");
+      alert("Kamera gagal dibuka: " + err.message);
     }
+
+    responseBox.innerHTML = "Kamera gagal dibuka.";
   }
 }
 
-  function ambilFoto() {
-    if (!stream) {
-      alert("Buka kamera terlebih dahulu!");
-      return;
-    }
-
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      alert("Kamera belum siap. Tunggu beberapa detik lalu coba lagi.");
-      return;
-    }
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    fotoData = canvas.toDataURL("image/png");
-
-    canvas.classList.remove("hidden");
-
-    responseBox.innerHTML = "Foto berhasil diambil.";
-
-    // Optional: matikan kamera setelah foto
-    stream.getTracks().forEach(track => track.stop());
+function ambilFoto() {
+  if (!stream) {
+    alert("Buka kamera terlebih dahulu!");
+    return;
   }
+
+  if (!video.videoWidth || !video.videoHeight) {
+    alert("Kamera belum siap.");
+    return;
+  }
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  fotoData = canvas.toDataURL("image/png");
+
+  canvas.classList.remove("hidden");
+  canvas.style.display = "block";
+
+  responseBox.innerHTML = "Foto berhasil diambil.";
+
+  // Matikan kamera setelah ambil foto
+  stream.getTracks().forEach(track => track.stop());
+  stream = null;
+}
+
+function kirimData() {
+  const nama = document.getElementById("nama").value.trim();
+  const kelas = document.getElementById("kelas").value;
+  const nis = document.getElementById("nis").value.trim();
+  const status = document.getElementById("status").value;
+
+  if (!nama || !kelas || !nis) {
+    alert("Semua data wajib diisi!");
+    return;
+  }
+
+  if (!fotoData) {
+    alert("Silakan ambil foto terlebih dahulu!");
+    return;
+  }
+
+  responseBox.innerHTML = "Mengirim data...";
+
+  fetch(scriptURL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      nama,
+      kelas,
+      nis,
+      status,
+      foto: fotoData
+    })
+  })
+  .then(() => {
+    responseBox.innerHTML = "Absen berhasil dikirim!";
+
+    document.getElementById("nama").value = "";
+    document.getElementById("kelas").value = "";
+    document.getElementById("nis").value = "";
+    document.getElementById("status").value = "Hadir";
+
+    fotoData = "";
+
+    canvas.classList.add("hidden");
+    video.classList.add("hidden");
+    snapBtn.classList.add("hidden");
+  })
+  .catch(err => {
+    console.error(err);
+    responseBox.innerHTML = "Upload gagal!";
+  });
+}
 
   function kirimData() {
     const nama = document.getElementById("nama").value.trim();
